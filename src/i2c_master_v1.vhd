@@ -50,8 +50,13 @@ ARCHITECTURE rtl OF i2c_master IS
   CONSTANT SCL_PERIOD   : INTEGER := (1000 * g_fpga_clk_freq_mhz) / g_desired_scl_freq_khz;
   CONSTANT SCL_DUTY     : INTEGER := SCL_PERIOD / 2;
 
--- Constants used to set "sda"
-  
+-- Constants used to time "sda"
+  CONSTANT START        : INTEGER := SCL_DUTY - (SCL_DUTY / 4);
+  CONSTANT STOP         : INTEGER := SCL_DUTY + (SCL_DUTY / 4);
+
+-- Internal "scl" signal, used to detect edges
+  SIGNAL scl_1r         : STD_LOGIC;
+  SIGNAL scl_2r         : STD_LOGIC;
 
 -- A counter used for "scl" timing
   SIGNAL scl_cnt        : INTEGER RANGE 0 TO SCL_PERIOD;
@@ -66,15 +71,20 @@ ARCHITECTURE rtl OF i2c_master IS
   TYPE t_i2c_master_state IS (
     s_idle,      -- Wait for valid inputs
     s_start,     -- Send start command
-    s_stop,      -- Send stop command
     s_write,     -- Write data to device
     s_read,      -- Read data from device
     s_ack,       -- Send an "ACK"
     s_check_ack, -- Wait for an "ACK"
     s_error,     -- No "ACK" received
+    s_stop,      -- Send stop command
     s_done       -- 
   );
   SIGNAL i2c_master_state : t_i2c_master_state;
+
+-- Internal storages of input signals
+  SIGNAL dev_addr_r     : STD_LOGIC_VECTOR(dev_addr'LEFT DOWNTO 0);
+  SIGNAL data_in_r      : STD_LOGIC_VECTOR(data_in'LEFT DOWNTO 0);
+  SIGNAL num_of_bytes_r : INTEGER RANGE 1 TO 20;
 
 
 
@@ -123,23 +133,29 @@ BEGIN
 
   END PROCESS
 
--- Control the timing of "scl".
+-- Control "scl".
   scl     : PROCESS(clk, rst) IS
   BEGIN
 
     IF rst = g_reset_active_state THEN
-    
+
+      scl_1r <= '1';
+      scl_2r <= '1';
       scl    <= 'Z';
     
     ELSIF RISING_EDGE(clk) THEN
-    
+
+      scl_2r <= scl_1r;
+
       IF scl_cnt < SCL_DUTY THEN
       
-        scl <= 'Z';
-      
+        scl    <= 'Z';
+        scl_1r <= '1';  
+		
       ELSE
-      
-        scl <= '0';
+	  
+        scl_1r <= '0';
+        scl    <= '0';
       
       END IF;
     
@@ -152,9 +168,65 @@ BEGIN
 
 IF rst = g_reset_active_state THEN
 
+  sda              <= 'Z';
+  dev_addr_r       <= (OTHERS => '0');
+  data_in_r        <= (OTHERS => '0');
+  num_of_bytes_r   <= 0;ELSIF RISING_EDGE(clk) THEN
 
-ELSIF RISING_EDGE(clk) THEN
+CASE i2c_master_state IS
 
+WHEN s_idle => -- Wait for "input_valid" to be pulsed
+
+  IF input_valid = '1' THEN -- Sample inputs and go to next state
+  
+    i2c_master_state <= s_start;
+    dev_addr_r       <= (OTHERS => '0');
+    data_in_r        <= (OTHERS => '0');
+    num_of_bytes_r   <= 0;
+  
+  ELSE
+    NULL;
+  
+  END IF;
+
+WHEN s_start => -- Send start command
+
+  IF scl_2r = '1' AND scl_1r = '1' THEN -- Bring "sda" low while "scl" is high
+  
+    sda              <= '0';
+    i2c_master_state <= s_write WHEN dev_addr_r(0) = '0' ELSE s_read;
+  
+  ELSE
+  
+    sda              <= 'Z';
+  
+  END IF;
+
+WHEN s_write => -- Write to device
+WHEN s_read => -- Read from device
+WHEN s_ack => -- Send an "ACK"
+WHEN s_check_ack => -- Wait for an "ACK"
+WHEN s_error => -- No "ACK" received
+
+WHEN s_stop => -- Send a stop command
+
+  IF scl_2r = '1' AND scl_1r = '1' THEN -- Bring "sda" high while "scl" is high
+  
+    sda              <= 'Z';
+    i2c_master_state <= s_done;
+  
+  ELSE
+  
+    sda              <= '0';
+  
+  END IF;
+
+WHEN s_done => -- Output data or just go to idle
+
+  WHEN OTHERS =>
+    NULL;
+
+END CASE;
 
 END IF; 
   
