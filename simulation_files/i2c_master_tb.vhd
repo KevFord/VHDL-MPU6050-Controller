@@ -111,8 +111,9 @@ BEGIN
   
     WAIT UNTIL FALLING_EDGE(tb_rst) FOR 1 us; -- Wait for the reset to be released
 	
---	WAIT UNTIL RISING_EDGE(dut_scl);
-
+  -- Send some mock data
+    dut_data_in     <= X"55";
+    dut_dev_addr    <= X"AA";
     dut_input_valid <= '1'; 
 	WAIT FOR 40 ns;
     dut_input_valid <= '0';
