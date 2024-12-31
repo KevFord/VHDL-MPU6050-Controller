@@ -31,7 +31,7 @@ ARCHITECTURE BEHAVE OF TB IS
   -- Inputs
     data_in      : IN STD_LOGIC_VECTOR(7 DOWNTO 0);
     dev_addr     : IN STD_LOGIC_VECTOR(7 DOWNTO 0); -- [7:1] address, [0] rw bit
-    num_of_bytes : IN INTEGER RANGE 1 TO 20;
+    num_of_bytes : IN INTEGER RANGE 1 TO 2;
     input_valid  : IN STD_LOGIC;
   
   -- Outputs
