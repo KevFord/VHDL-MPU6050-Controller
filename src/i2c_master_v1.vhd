@@ -85,6 +85,8 @@ ARCHITECTURE rtl OF i2c_master IS
   SIGNAL data_in_r      : STD_LOGIC_VECTOR(data_in'LEFT DOWNTO 0);
   SIGNAL num_of_bytes_r : INTEGER RANGE 1 TO 20;
 
+-- A flag used to enable "scl"
+  SIGNAL scl_enable     : STD_LOGIC;
 
 
 BEGIN
@@ -112,6 +114,8 @@ BEGIN
   scl_counter : PROCESS(clk, rst) IS
   BEGIN
 
+IF scl_enable = '1' THEN
+
     IF rst = g_reset_active_state THEN
 
       scl_cnt <= 0;
@@ -129,6 +133,13 @@ BEGIN
       END IF;
   
     END IF;
+
+ELSE
+
+  scl_cnt <= 0;
+  
+END IF;
+
 
   END PROCESS;
 
@@ -167,6 +178,7 @@ BEGIN
 
 IF rst = g_reset_active_state THEN
 
+  scl_enable       <= '0';
   sda              <= 'Z';
   dev_addr_r       <= (OTHERS => '0');
   data_in_r        <= (OTHERS => '0');
@@ -183,6 +195,7 @@ WHEN s_idle => -- Wait for "input_valid" to be pulsed
 
   IF input_valid = '1' THEN -- Sample inputs and go to next state
   
+    scl_enable       <= '1';
     i2c_master_state <= s_start;
     dev_addr_r       <= dev_addr;
     data_in_r        <= data_in;
