@@ -50,9 +50,8 @@ ARCHITECTURE rtl OF i2c_master IS
   CONSTANT SCL_PERIOD   : INTEGER := (1000 * g_fpga_clk_freq_mhz) / g_desired_scl_freq_khz;
   CONSTANT SCL_DUTY     : INTEGER := SCL_PERIOD / 2;
 
--- Constants used to time "sda"
-  CONSTANT START        : INTEGER := SCL_DUTY - (SCL_DUTY / 4);
-  CONSTANT STOP         : INTEGER := SCL_DUTY + (SCL_DUTY / 4);
+-- Constant used to time "sda" to signal a start or stop condition
+  CONSTANT START_STOP   : INTEGER := SCL_DUTY - (SCL_DUTY / 4);
 
 -- Internal "scl" signal, used to detect edges
   SIGNAL scl_1r         : STD_LOGIC;
@@ -198,21 +197,29 @@ WHEN s_start => -- Send start command
 
   IF scl_2r = '1' AND scl_1r = '1' THEN -- Bring "sda" low while "scl" is high
   
-    sda              <= '0';
-
-IF dev_addr_r(0) = '0' THEN
-
-  i2c_master_state <= s_read;
-
-ELSE
-
-  i2c_master_state <= s_write;
-
-END IF;
+    IF scl_cnt = START_STOP THEN -- Ensures "sda" is pulled low towards the end of the "scl" high period
+    
+      sda <= '0';
+  
+      IF dev_addr_r(0) = '0' THEN
+      
+        i2c_master_state <= s_write;
+      
+      ELSE
+      
+        i2c_master_state <= s_read;
+      
+      END IF;
+    
+    ELSE
+  
+      sda <= 'Z';
+    
+    END IF;
   
   ELSE
   
-    sda              <= 'Z';
+    sda <= 'Z';
   
   END IF;
 
@@ -224,14 +231,23 @@ WHEN s_error => -- No "ACK" received
 
 WHEN s_stop => -- Send a stop command
 
-  IF scl_2r = '1' AND scl_1r = '1' THEN -- Bring "sda" high while "scl" is high
+  IF scl_1r = '1' AND scl_2r = '1' THEN -- Stop involves bringing "sda" high while "scl" is high
+
+    IF scl_cnt = START_STOP THEN -- Ensures "sda" is pulled low towards the end of the "scl" high period
+    
+      sda <= 'Z';
+      
+      i2c_master_state <= s_done;
+    
+    ELSE
   
-    sda              <= 'Z';
-    i2c_master_state <= s_done;
-  
+      sda <= '0';
+    
+    END IF;
+
   ELSE
   
-    sda              <= '0';
+    sda <= '0';
   
   END IF;
 
