@@ -111,7 +111,7 @@ BEGIN
   
     WAIT UNTIL FALLING_EDGE(tb_rst) FOR 1 us; -- Wait for the reset to be released
 	
-	WAIT UNTIL RISING_EDGE(dut_scl);
+--	WAIT UNTIL RISING_EDGE(dut_scl);
 
     dut_input_valid <= '1'; 
 	WAIT FOR 40 ns;
