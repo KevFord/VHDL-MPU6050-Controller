@@ -113,6 +113,10 @@ BEGIN
 	
 	WAIT UNTIL RISING_EDGE(dut_scl);
 
+    dut_input_valid <= '1'; 
+	WAIT FOR 40 ns;
+    dut_input_valid <= '0';
+
     WAIT FOR 1 ms;  
   
     REPORT "Test completed as intended." SEVERITY FAILURE;
