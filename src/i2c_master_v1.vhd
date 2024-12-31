@@ -62,7 +62,7 @@ ARCHITECTURE rtl OF i2c_master IS
   SIGNAL scl_cnt        : INTEGER RANGE 0 TO SCL_PERIOD;
 
 -- A counter used to control "sda" timing
-  SIGNAL sda_cnt        : INTEGER RANGE 0 TO 
+  SIGNAL sda_cnt        : INTEGER RANGE 0 TO SCL_PERIOD;
 
 -- Input synch
   SIGNAL sda_1r         : STD_LOGIC;
@@ -131,10 +131,10 @@ BEGIN
   
     END IF;
 
-  END PROCESS
+  END PROCESS;
 
 -- Control "scl".
-  scl     : PROCESS(clk, rst) IS
+  scl_process     : PROCESS(clk, rst) IS
   BEGIN
 
     IF rst = g_reset_active_state THEN
@@ -163,7 +163,7 @@ BEGIN
 
   END PROCESS;
 
-  sda     : PROCESS(clk, rst) IS
+  sda_process     : PROCESS(clk, rst) IS
   BEGIN
 
 IF rst = g_reset_active_state THEN
@@ -171,7 +171,12 @@ IF rst = g_reset_active_state THEN
   sda              <= 'Z';
   dev_addr_r       <= (OTHERS => '0');
   data_in_r        <= (OTHERS => '0');
-  num_of_bytes_r   <= 0;ELSIF RISING_EDGE(clk) THEN
+  num_of_bytes_r   <= 1;
+  error            <= '0';
+  data_out         <= (OTHERS => '0');
+  data_valid       <= '0';
+  
+ELSIF RISING_EDGE(clk) THEN
 
 CASE i2c_master_state IS
 
@@ -180,9 +185,9 @@ WHEN s_idle => -- Wait for "input_valid" to be pulsed
   IF input_valid = '1' THEN -- Sample inputs and go to next state
   
     i2c_master_state <= s_start;
-    dev_addr_r       <= (OTHERS => '0');
-    data_in_r        <= (OTHERS => '0');
-    num_of_bytes_r   <= 0;
+    dev_addr_r       <= dev_addr;
+    data_in_r        <= data_in;
+    num_of_bytes_r   <= num_of_bytes;
   
   ELSE
     NULL;
@@ -194,7 +199,16 @@ WHEN s_start => -- Send start command
   IF scl_2r = '1' AND scl_1r = '1' THEN -- Bring "sda" low while "scl" is high
   
     sda              <= '0';
-    i2c_master_state <= s_write WHEN dev_addr_r(0) = '0' ELSE s_read;
+
+IF dev_addr_r(0) = '0' THEN
+
+  i2c_master_state <= s_read;
+
+ELSE
+
+  i2c_master_state <= s_write;
+
+END IF;
   
   ELSE
   
