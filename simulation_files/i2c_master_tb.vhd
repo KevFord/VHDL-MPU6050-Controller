@@ -74,6 +74,12 @@ ARCHITECTURE BEHAVE OF TB IS
   SIGNAL dut_data_valid   : STD_LOGIC := '0';
   SIGNAL dut_error        : STD_LOGIC := '0';
 
+-- Some signals to allow the TB to send an "ACK" to fully test the DUT's ability
+-- to write data to an I2C device
+  SIGNAL start_detected   : STD_LOGIC := '0';
+  SIGNAL stop_detected    : STD_LOGIC := '0';
+  SIGNAL bit_index        : INTEGER RANGE 0 TO 7 := 7;
+
 BEGIN
 
   clock_and_reset : CLOCK_RESET
@@ -104,6 +110,44 @@ BEGIN
 
   dut_scl    <= 'H'; -- Weak pull-up
   dut_sda    <= 'H'; -- Weak pull-up
+
+-- Detect and flag start conditions
+  start_detection : PROCESS IS
+  BEGIN
+  
+    WAIT UNTIL FALLING_EDGE(dut_sda);
+    
+    IF dut_scl /= '0' THEN
+	
+      start_detected <= '1';
+      REPORT "Start condition detected.";
+    
+    ELSE 
+    
+      start_detected <= '0';
+    
+    END IF;
+  
+  END PROCESS;
+
+-- Detect and flag stop conditions
+  stop_detection : PROCESS IS
+  BEGIN
+  
+    WAIT UNTIL RISING_EDGE(dut_sda);
+
+    IF dut_scl /= '0' THEN
+
+      stop_detected <= '1';
+      REPORT "Stop condition detected.";
+    
+    ELSE 
+    
+      stop_detected <= '0';
+    
+    END IF;
+  
+  END PROCESS;
 
 
   main_test : PROCESS IS
