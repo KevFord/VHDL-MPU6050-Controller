@@ -33,7 +33,7 @@ PORT (
 -- Inputs
   data_in      : IN STD_LOGIC_VECTOR(7 DOWNTO 0);
   dev_addr     : IN STD_LOGIC_VECTOR(7 DOWNTO 0); -- [7:1] address, [0] rw bit
-  num_of_bytes : IN INTEGER RANGE 1 TO 20;
+  num_of_bytes : IN INTEGER RANGE 1 TO 2;
   input_valid  : IN STD_LOGIC;
 
 -- Outputs
@@ -88,6 +88,15 @@ ARCHITECTURE rtl OF i2c_master IS
 -- A flag used to enable "scl"
   SIGNAL scl_enable     : STD_LOGIC;
 
+-- Buffers. The IMU on the MPU6050 stores values as 16 bit words.
+-- The master will be able to read both one and two bytes.
+-- When reading two bytes these are combined into a single word.
+  SIGNAL read_word_1    : STD_LOGIC_VECTOR(15 DOWNTO 0);
+  SIGNAL read_word_2    : STD_LOGIC_VECTOR(15 DOWNTO 0);
+  SIGNAL read_word_3    : STD_LOGIC_VECTOR(15 DOWNTO 0);
+  SIGNAL read_byte_1    : STD_LOGIC_VECTOR(7 DOWNTO 0);
+  SIGNAL read_byte_2    : STD_LOGIC_VECTOR(7 DOWNTO 0);
+  SIGNAL read_byte_3    : STD_LOGIC_VECTOR(7 DOWNTO 0);
 
 BEGIN
 
@@ -191,50 +200,50 @@ ELSIF RISING_EDGE(clk) THEN
 
 CASE i2c_master_state IS
 
-WHEN s_idle => -- Wait for "input_valid" to be pulsed
-
-  IF input_valid = '1' THEN -- Sample inputs and go to next state
+  WHEN s_idle => -- Wait for "input_valid" to be pulsed
   
-    scl_enable       <= '1';
-    i2c_master_state <= s_start;
-    dev_addr_r       <= dev_addr;
-    data_in_r        <= data_in;
-    num_of_bytes_r   <= num_of_bytes;
-  
-  ELSE
-    NULL;
-  
-  END IF;
-
-WHEN s_start => -- Send start command
-
-  IF scl_2r = '1' AND scl_1r = '1' THEN -- Bring "sda" low while "scl" is high
-  
-    IF scl_cnt = START_STOP THEN -- Ensures "sda" is pulled low towards the end of the "scl" high period
+    IF input_valid = '1' THEN -- Sample inputs and go to next state
     
-      sda <= '0';
+      scl_enable       <= '1';
+      i2c_master_state <= s_start;
+      dev_addr_r       <= dev_addr;
+      data_in_r        <= data_in;
+      num_of_bytes_r   <= num_of_bytes;
+    
+    ELSE
+      NULL;
+    
+    END IF;
+
+  WHEN s_start => -- Send start command
   
-      IF dev_addr_r(0) = '0' THEN
+    IF scl_2r = '1' AND scl_1r = '1' THEN -- Bring "sda" low while "scl" is high
+    
+      IF scl_cnt = START_STOP THEN -- Ensures "sda" is pulled low towards the end of the "scl" high period
       
-        i2c_master_state <= s_write;
+        sda <= '0';
+    
+        IF dev_addr_r(0) = '0' THEN
+        
+          i2c_master_state <= s_write;
+        
+        ELSE
+        
+          i2c_master_state <= s_read;
+        
+        END IF;
       
       ELSE
-      
-        i2c_master_state <= s_read;
+    
+        sda <= 'Z';
       
       END IF;
     
     ELSE
-  
+    
       sda <= 'Z';
     
     END IF;
-  
-  ELSE
-  
-    sda <= 'Z';
-  
-  END IF;
 
 WHEN s_write => -- Write to device
 WHEN s_read => -- Read from device
