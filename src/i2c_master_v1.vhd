@@ -50,8 +50,14 @@ ARCHITECTURE rtl OF i2c_master IS
   CONSTANT SCL_PERIOD   : INTEGER := (1000 * g_fpga_clk_freq_mhz) / g_desired_scl_freq_khz;
   CONSTANT SCL_DUTY     : INTEGER := SCL_PERIOD / 2;
 
--- Constant used to time "sda" to signal a start or stop condition
+-- Constant used to time "sda" to signal and the start / stop condition
   CONSTANT START_STOP   : INTEGER := SCL_DUTY - (SCL_DUTY / 4);
+  
+-- The "sda" clock should have the same period as the "scl" clock
+-- however, the "sda" clock should go toggle half of the "scl" duty
+-- before and after "scl" has toggled
+  CONSTANT DATA_BEGIN   : INTEGER := SCL_DUTY - (SCL_DUTY / 2);
+  CONSTANT DATA_END     : INTEGER := SCL_DUTY + (SCL_DUTY / 2);  
 
 -- Internal "scl" signal, used to detect edges
   SIGNAL scl_1r         : STD_LOGIC;
@@ -81,24 +87,84 @@ ARCHITECTURE rtl OF i2c_master IS
   SIGNAL i2c_master_state : t_i2c_master_state;
 
 -- Internal storages of input signals
-  SIGNAL dev_addr_r     : STD_LOGIC_VECTOR(dev_addr'LEFT DOWNTO 0);
-  SIGNAL data_in_r      : STD_LOGIC_VECTOR(data_in'LEFT DOWNTO 0);
-  SIGNAL num_of_bytes_r : INTEGER RANGE 1 TO 20;
+  SIGNAL dev_addr_r       : STD_LOGIC_VECTOR(dev_addr'LEFT DOWNTO 0);
+  SIGNAL data_in_r        : STD_LOGIC_VECTOR(data_in'LEFT DOWNTO 0);
+  SIGNAL num_of_bytes_r   : INTEGER RANGE 1 TO 20;
 
 -- A flag used to enable "scl"
-  SIGNAL scl_enable     : STD_LOGIC;
+  SIGNAL scl_enable       : STD_LOGIC;
 
 -- Buffers. The IMU on the MPU6050 stores values as 16 bit words.
 -- The master will be able to read both one and two bytes.
 -- When reading two bytes these are combined into a single word.
-  SIGNAL read_word_1    : STD_LOGIC_VECTOR(15 DOWNTO 0);
-  SIGNAL read_word_2    : STD_LOGIC_VECTOR(15 DOWNTO 0);
-  SIGNAL read_word_3    : STD_LOGIC_VECTOR(15 DOWNTO 0);
-  SIGNAL read_byte_1    : STD_LOGIC_VECTOR(7 DOWNTO 0);
-  SIGNAL read_byte_2    : STD_LOGIC_VECTOR(7 DOWNTO 0);
-  SIGNAL read_byte_3    : STD_LOGIC_VECTOR(7 DOWNTO 0);
+  SIGNAL read_word_1       : STD_LOGIC_VECTOR(15 DOWNTO 0);
+  SIGNAL read_word_2       : STD_LOGIC_VECTOR(15 DOWNTO 0);
+  SIGNAL read_word_3       : STD_LOGIC_VECTOR(15 DOWNTO 0);
+  SIGNAL read_byte_1       : STD_LOGIC_VECTOR(7 DOWNTO 0);
+  SIGNAL read_byte_2       : STD_LOGIC_VECTOR(7 DOWNTO 0);
+  SIGNAL read_byte_3       : STD_LOGIC_VECTOR(7 DOWNTO 0);
+
+-- A counter used as index for reading and writing data
+  CONSTANT BIT_INDEX_MAX  : INTEGER := 7;
+  SIGNAL bit_index        : INTEGER RANGE 0 TO BIT_INDEX_MAX;
 
 BEGIN
+
+-- Increment and reset the "sda" clock
+  sda_clock : PROCESS(clk, rst) IS
+  BEGIN
+  
+    IF rst = g_reset_active_state THEN
+    
+      sda_cnt <= 0;
+    
+    ELSIF RISING_EDGE(clk) THEN
+    
+      IF sda_cnt = SCL_PERIOD THEN
+      
+        sda_cnt <= 0;
+      
+      ELSE
+      
+        sda_cnt <= sda_cnt + 1;
+      
+      END IF;
+    
+    END IF;
+  
+  END PROCESS;
+
+-- Decrement and reset the bit index signal 
+  bit_index_cnt : PROCESS(clk, rst) IS
+  BEGIN
+  
+    IF rst = g_reset_active_state THEN
+    
+      bit_index <= BIT_INDEX_MAX;
+    
+    ELSIF RISING_EDGE(clk) THEN
+    
+      IF sda_cnt = DATA_END THEN
+      
+        IF bit_index = 0 THEN
+        
+          bit_index <= BIT_INDEX_MAX;
+        
+        ELSE
+        
+          bit_index <=  bit_index - 1;
+        
+        END IF;
+      
+      ELSE
+      
+        bit_index <= bit_index;
+      
+      END IF;
+    
+    END IF;
+  
+  END PROCESS;
 
 -- As "sda" is an inout port, the inputs need to be synchronized to the FPGA clock domain.
 -- This is done by "doubble flipping" the input.
@@ -120,7 +186,7 @@ BEGIN
   END PROCESS;
 
 -- Increment and reset the counter used for "scl" -timing.
-  scl_counter : PROCESS(clk, rst) IS
+  scl_clock : PROCESS(clk, rst) IS
   BEGIN
 
 IF scl_enable = '1' THEN
@@ -195,6 +261,13 @@ IF rst = g_reset_active_state THEN
   error            <= '0';
   data_out         <= (OTHERS => '0');
   data_valid       <= '0';
+
+  read_byte_1      <= (OTHERS => '0');
+  read_byte_2      <= (OTHERS => '0');
+  read_byte_3      <= (OTHERS => '0');
+  read_word_1      <= (OTHERS => '0');
+  read_word_2      <= (OTHERS => '0');
+  read_word_3      <= (OTHERS => '0');
   
 ELSIF RISING_EDGE(clk) THEN
 
@@ -245,11 +318,38 @@ CASE i2c_master_state IS
     
     END IF;
 
-WHEN s_write => -- Write to device
+  WHEN s_write => -- Write to device
+  
+  -- Check what to output. If the current value
+  -- is not zero, "sda" is set to tri-state
+    IF data_in_r(bit_index) /= '0' THEN
+    
+      sda <= 'Z';
+    
+    ELSE
+    
+      sda <= '0';
+    
+    END IF;
+
+  -- Check if this was the last bit
+    IF bit_index = 0 THEN  
+    
+      i2c_master_state <= s_check_ack; 
+    
+    ELSE
+      NULL;
+    
+    END IF;
+
 WHEN s_read => -- Read from device
 WHEN s_ack => -- Send an "ACK"
 WHEN s_check_ack => -- Wait for an "ACK"
-WHEN s_error => -- No "ACK" received
+
+  WHEN s_error => -- No "ACK" received
+  
+    error <= '1';
+    i2c_master_state <= s_stop;
 
 WHEN s_stop => -- Send a stop command
 
