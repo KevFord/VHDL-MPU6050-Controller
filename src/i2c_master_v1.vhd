@@ -112,6 +112,9 @@ ARCHITECTURE rtl OF i2c_master IS
   CONSTANT ACK_TIMEOUT    : INTEGER := 50;
   SIGNAL ack_timeout_cnt  : INTEGER RANGE 0 TO ACK_TIMEOUT;
 
+-- A flag indicating an error occured (no "ACK")
+  SIGNAL error_flag       : STD_LOGIC;
+
 BEGIN
 
 -- Increment and reset the "sda" clock
@@ -264,6 +267,7 @@ IF rst = g_reset_active_state THEN
   sda              <= 'Z';
   error            <= '0';
   data_valid       <= '0';
+  error_flag       <= '0';
 
   dev_addr_r       <= (OTHERS => '0');
   data_in_r        <= (OTHERS => '0');
@@ -280,6 +284,9 @@ ELSIF RISING_EDGE(clk) THEN
 CASE i2c_master_state IS
 
   WHEN s_idle => -- Wait for "input_valid" to be pulsed
+
+    error_flag <= '0'; -- Clear the error flags
+    error      <= '1';
   
     IF input_valid = '1' THEN -- Sample inputs and go to next state
     
@@ -383,8 +390,9 @@ WHEN s_read => -- Read from device
     END IF;
   
   WHEN s_error => -- No "ACK" received
-  
-    error <= '1';
+
+    error_flag       <= '1';  
+    error            <= '1';
     i2c_master_state <= s_stop;
 
   WHEN s_stop => -- Send a stop command
@@ -392,11 +400,19 @@ WHEN s_read => -- Read from device
     IF scl_1r = '1' AND scl_2r = '1' THEN -- Stop involves bringing "sda" high while "scl" is high
   
       IF scl_cnt = START_STOP THEN -- Ensures "sda" is pulled low towards the end of the "scl" high period
-      
+
         sda <= 'Z';
+
+        IF error_flag = '1' THEN
         
-        i2c_master_state <= s_done; -- Should not go to this state if an error occured
-      
+          i2c_master_state <= s_idle;
+        
+        ELSE
+        
+          i2c_master_state <= s_done;
+        
+        END IF;
+
       ELSE
     
         sda <= '0';
