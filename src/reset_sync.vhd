@@ -29,7 +29,7 @@ BEGIN
   PROCESS IS
   BEGIN
 
-    IF rst = g_reset_active_state THEN
+    IF rst_in = g_reset_active_state THEN
 
       rst_1r  <= g_reset_active_state;
       rst_2r  <= g_reset_active_state;
