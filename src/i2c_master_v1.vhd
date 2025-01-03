@@ -105,7 +105,7 @@ ARCHITECTURE rtl OF i2c_master IS
   SIGNAL read_byte_3       : STD_LOGIC_VECTOR(7 DOWNTO 0);
 
 -- A counter used as index for reading and writing data
-  CONSTANT BIT_INDEX_MAX  : INTEGER := 7;
+  CONSTANT BIT_INDEX_MAX  : INTEGER := 8;
   SIGNAL bit_index        : INTEGER RANGE 0 TO BIT_INDEX_MAX;
 
 -- A timeout. Decides how long to wait for an "ACK"
@@ -200,7 +200,6 @@ BEGIN
 -- Increment and reset the counter used for "scl" -timing.
   scl_clock : PROCESS(clk, rst) IS
   BEGIN
-
 
     IF rst = g_reset_active_state THEN
 
@@ -353,6 +352,8 @@ ELSIF RISING_EDGE(clk) THEN
     
     -- Check what to output. If the current value
     -- is not zero, "sda" is set to tri-state
+    IF bit_index < BIT_INDEX_MAX THEN
+	
       IF data_in_r(bit_index) /= '0' THEN
       
         sda <= 'Z';
@@ -362,6 +363,11 @@ ELSIF RISING_EDGE(clk) THEN
         sda <= '0';
       
       END IF;
+
+    ELSE
+      NULL;
+    	  
+    END IF;
 
     -- Check if this was the last bit
       IF scl_edge_cnt = SCL_DATA_DONE AND scl_cnt = DATA_END THEN  
@@ -374,15 +380,22 @@ ELSIF RISING_EDGE(clk) THEN
       END IF;
 
     WHEN s_read => -- Read from device
-  
-      IF sda_2r /= '0' THEN
-      
-        read_byte_1(bit_index) <= '1';
-      
+
+      IF bit_index < BIT_INDEX_MAX THEN
+	  
+        IF sda_2r /= '0' THEN
+        
+          read_byte_1(bit_index) <= '1';
+        
+        ELSE
+        
+          read_byte_1(bit_index) <= '0';
+        
+        END IF;
+	  
       ELSE
-      
-        read_byte_1(bit_index) <= '0';
-      
+        NULL;
+        
       END IF;
 
     -- Check if this was the last bit
