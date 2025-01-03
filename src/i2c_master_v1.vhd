@@ -156,7 +156,7 @@ BEGIN
     
     ELSIF RISING_EDGE(clk) THEN
     
-      IF sda_cnt = DATA_END THEN
+      IF sda_cnt = DATA_END AND (i2c_master_state = s_write OR i2c_master_state = s_read) THEN
       
         IF bit_index = 0 THEN
         
@@ -201,7 +201,6 @@ BEGIN
   scl_clock : PROCESS(clk, rst) IS
   BEGIN
 
-IF scl_enable = '1' THEN
 
     IF rst = g_reset_active_state THEN
 
@@ -209,35 +208,36 @@ IF scl_enable = '1' THEN
       scl_cnt      <= 0;
 
     ELSIF RISING_EDGE(clk) THEN
+  
+      IF scl_enable = '1' THEN
 
-      IF scl_cnt = SCL_PERIOD THEN
-
-        IF scl_edge_cnt = SCL_ACK_EDGE THEN
-        
-          scl_edge_cnt <= 0;
-        
+        IF scl_cnt = SCL_PERIOD THEN
+	    
+          IF scl_edge_cnt = SCL_ACK_EDGE THEN
+          
+            scl_edge_cnt <= 0;
+          
+          ELSE
+          
+            scl_edge_cnt <= scl_edge_cnt + 1;
+          
+          END IF;
+	    
+          scl_cnt <= 0;
+	    
         ELSE
-        
-          scl_edge_cnt <= scl_edge_cnt + 1;
-        
+	    
+          scl_cnt <= scl_cnt + 1;
+	    
         END IF;
-
-        scl_cnt <= 0;
-
+	  
       ELSE
-
-        scl_cnt <= scl_cnt + 1;
-
+      
+        scl_cnt <= 0;
+        
       END IF;
-  
+
     END IF;
-
-ELSE
-
-  scl_cnt <= 0;
-  
-END IF;
-
 
   END PROCESS;
 
@@ -362,17 +362,17 @@ ELSIF RISING_EDGE(clk) THEN
         sda <= '0';
       
       END IF;
-  
+
     -- Check if this was the last bit
-      IF bit_index = 0 THEN  
-      
+      IF scl_edge_cnt = SCL_DATA_DONE AND scl_cnt = DATA_END THEN  
+
         i2c_master_state <= s_check_ack; 
       
       ELSE
         NULL;
       
       END IF;
-  
+
     WHEN s_read => -- Read from device
   
       IF sda_2r /= '0' THEN
@@ -384,17 +384,16 @@ ELSIF RISING_EDGE(clk) THEN
         read_byte_1(bit_index) <= '0';
       
       END IF;
-  
+
     -- Check if this was the last bit
-      IF bit_index = 0 THEN  
+      IF scl_edge_cnt = SCL_DATA_DONE AND scl_cnt = DATA_END THEN  
 
         i2c_master_state <= s_ack; 
       
       ELSE
         NULL;
       
-      END IF;
-  
+      END IF;  
   
     WHEN s_ack => -- Send an "ACK"
     
