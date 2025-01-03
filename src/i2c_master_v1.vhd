@@ -115,6 +115,11 @@ ARCHITECTURE rtl OF i2c_master IS
 -- A flag indicating an error occured (no "ACK")
   SIGNAL error_flag       : STD_LOGIC;
 
+-- A counter keeping track of how many rising edges have been sent on "scl"
+  CONSTANT SCL_DATA_DONE  : INTEGER := 8;
+  CONSTANT SCL_ACK_EDGE   : INTEGER := 9;
+  SIGNAL scl_edge_cnt     : INTEGER RANGE 0 TO SCL_ACK_EDGE;
+
 BEGIN
 
 -- Increment and reset the "sda" clock
@@ -122,7 +127,7 @@ BEGIN
   BEGIN
   
     IF rst = g_reset_active_state THEN
-    
+
       sda_cnt <= 0;
     
     ELSIF RISING_EDGE(clk) THEN
@@ -200,11 +205,22 @@ IF scl_enable = '1' THEN
 
     IF rst = g_reset_active_state THEN
 
-      scl_cnt <= 0;
+      scl_edge_cnt <= 0;
+      scl_cnt      <= 0;
 
     ELSIF RISING_EDGE(clk) THEN
 
       IF scl_cnt = SCL_PERIOD THEN
+
+        IF scl_edge_cnt = SCL_ACK_EDGE THEN
+        
+          scl_edge_cnt <= 0;
+        
+        ELSE
+        
+          scl_edge_cnt <= scl_edge_cnt + 1;
+        
+        END IF;
 
         scl_cnt <= 0;
 
@@ -234,18 +250,18 @@ END IF;
       scl_1r <= '1';
       scl_2r <= '1';
       scl    <= 'Z';
-    
+
     ELSIF RISING_EDGE(clk) THEN
 
       scl_2r <= scl_1r;
 
       IF scl_cnt < SCL_DUTY THEN
-      
+
         scl    <= 'Z';
         scl_1r <= '1';  
-		
+
       ELSE
-	  
+
         scl_1r <= '0';
         scl    <= '0';
       
@@ -281,156 +297,179 @@ IF rst = g_reset_active_state THEN
   
 ELSIF RISING_EDGE(clk) THEN
 
-CASE i2c_master_state IS
-
-  WHEN s_idle => -- Wait for "input_valid" to be pulsed
-
-    error_flag <= '0'; -- Clear the error flags
-    error      <= '1';
+  CASE i2c_master_state IS
   
-    IF input_valid = '1' THEN -- Sample inputs and go to next state
-    
-      scl_enable       <= '1';
-      i2c_master_state <= s_start;
-      dev_addr_r       <= dev_addr;
-      data_in_r        <= data_in;
-      num_of_bytes_r   <= num_of_bytes;
-    
-    ELSE
-      NULL;
-    
-    END IF;
-
-  WHEN s_start => -- Send start command
+    WHEN s_idle => -- Wait for "input_valid" to be pulsed
   
-    IF scl_2r = '1' AND scl_1r = '1' THEN -- Bring "sda" low while "scl" is high
+      error_flag <= '0'; -- Clear the error flags
+      error      <= '0';
     
-      IF scl_cnt = START_STOP THEN -- Ensures "sda" is pulled low towards the end of the "scl" high period
+      IF input_valid = '1' THEN -- Sample inputs and go to next state
+
+        data_out         <= (OTHERS => '0'); -- Reset the output
+        data_valid       <= '0'; -- Clear flag
+        scl_enable       <= '1'; -- Start "scl"
+        i2c_master_state <= s_start; -- Send start command
+        dev_addr_r       <= dev_addr; -- Store inputs
+        data_in_r        <= data_in;
+        num_of_bytes_r   <= num_of_bytes;
       
-        sda <= '0';
+      ELSE
+        NULL;
+      
+      END IF;
+  
+    WHEN s_start => -- Send start command
     
-        IF dev_addr_r(0) = '0' THEN
+      IF scl_2r = '1' AND scl_1r = '1' THEN -- Bring "sda" low while "scl" is high
+      
+        IF scl_cnt = START_STOP THEN -- Ensures "sda" is pulled low towards the end of the "scl" high period
         
-          i2c_master_state <= s_write;
+          sda <= '0';
+      
+          IF dev_addr_r(0) = '0' THEN
+          
+            i2c_master_state <= s_write;
+          
+          ELSE
+          
+            i2c_master_state <= s_read;
+          
+          END IF;
         
         ELSE
-        
-          i2c_master_state <= s_read;
+      
+          sda <= 'Z';
         
         END IF;
       
       ELSE
-    
+      
         sda <= 'Z';
       
       END IF;
-    
-    ELSE
-    
-      sda <= 'Z';
-    
-    END IF;
-
-  WHEN s_write => -- Write to device
   
-  -- Check what to output. If the current value
-  -- is not zero, "sda" is set to tri-state
-    IF data_in_r(bit_index) /= '0' THEN
+    WHEN s_write => -- Write to device
     
-      sda <= 'Z';
-    
-    ELSE
-    
-      sda <= '0';
-    
-    END IF;
-
-  -- Check if this was the last bit
-    IF bit_index = 0 THEN  
-    
-      i2c_master_state <= s_check_ack; 
-    
-    ELSE
-      NULL;
-    
-    END IF;
-
-WHEN s_read => -- Read from device
-
-  WHEN s_ack => -- Send an "ACK"
-  
-    IF sda_cnt = DATA_BEGIN THEN -- Send an "ACK" in the same fashion as when sending normal data
-    
-      sda <= '0';
-    
-    ELSIF sda_cnt = DATA_END THEN
-    
-      sda <= 'Z';
-      i2c_master_state <= s_stop; -- Transaction complete
-    
-    END IF;
-
-  WHEN s_check_ack => -- Wait for an "ACK"
-  
-    IF scl_1r = '0' AND scl_2r = '1' THEN -- Rising edge of "scl"
-    
-      IF sda = '0' THEN -- "ACK"
+    -- Check what to output. If the current value
+    -- is not zero, "sda" is set to tri-state
+      IF data_in_r(bit_index) /= '0' THEN
       
-        i2c_master_state <= s_done;
+        sda <= 'Z';
       
-      ELSE -- No "ACK"  
-  
-        i2c_master_state <= s_error;
-  
+      ELSE
+      
+        sda <= '0';
+      
       END IF;
   
-    ELSE -- Do nothing until the next rising edge of "scl"
-      NULL;
+    -- Check if this was the last bit
+      IF bit_index = 0 THEN  
+      
+        i2c_master_state <= s_check_ack; 
+      
+      ELSE
+        NULL;
+      
+      END IF;
+  
+    WHEN s_read => -- Read from device
+  
+      IF sda_2r /= '0' THEN
+      
+        read_byte_1(bit_index) <= '1';
+      
+      ELSE
+      
+        read_byte_1(bit_index) <= '0';
+      
+      END IF;
+  
+    -- Check if this was the last bit
+      IF bit_index = 0 THEN  
+
+        i2c_master_state <= s_ack; 
+      
+      ELSE
+        NULL;
+      
+      END IF;
+  
+  
+    WHEN s_ack => -- Send an "ACK"
     
-    END IF;
-  
-  WHEN s_error => -- No "ACK" received
-
-    error_flag       <= '1';  
-    error            <= '1';
-    i2c_master_state <= s_stop;
-
-  WHEN s_stop => -- Send a stop command
-  
-    IF scl_1r = '1' AND scl_2r = '1' THEN -- Stop involves bringing "sda" high while "scl" is high
-  
-      IF scl_cnt = START_STOP THEN -- Ensures "sda" is pulled low towards the end of the "scl" high period
-
+      IF sda_cnt = DATA_BEGIN THEN -- Send an "ACK" in the same fashion as when sending normal data
+      
+        sda <= '0';
+      
+      ELSIF sda_cnt = DATA_END THEN
+      
         sda <= 'Z';
-
-        IF error_flag = '1' THEN
-        
-          i2c_master_state <= s_idle;
-        
-        ELSE
-        
+        i2c_master_state <= s_stop; -- Transaction complete
+      
+      END IF;
+  
+    WHEN s_check_ack => -- Wait for an "ACK"
+    
+      IF scl_1r = '0' AND scl_2r = '1' AND scl_edge_cnt = SCL_ACK_EDGE THEN -- Rising edge of "scl"
+  
+        IF sda = '0' THEN -- "ACK"
+  
           i2c_master_state <= s_done;
+  
+        ELSE -- No "ACK"  
+  
+          i2c_master_state <= s_error;
+  
+        END IF;
+  
+      ELSE -- Do nothing until the next rising edge of "scl"
+        NULL;
+  
+      END IF;
+    
+    WHEN s_error => -- No "ACK" received
+  
+      error_flag       <= '1';  
+      error            <= '1';
+      i2c_master_state <= s_stop;
+  
+    WHEN s_stop => -- Send a stop command
+    
+      IF scl_1r = '1' AND scl_2r = '1' THEN -- Stop involves bringing "sda" high while "scl" is high
+    
+        IF scl_cnt = START_STOP THEN -- Ensures "sda" is pulled low towards the end of the "scl" high period
+  
+          sda <= 'Z';
+  
+          IF error_flag = '1' THEN -- Check to see if an error occured or if this was an expected stop
+          
+            i2c_master_state <= s_idle;
+          
+          ELSE
+          
+            i2c_master_state <= s_done;
+          
+          END IF;
+  
+        ELSE
+      
+          sda <= '0';
         
         END IF;
-
-      ELSE
     
+      ELSE
+      
         sda <= '0';
       
       END IF;
   
-    ELSE
-    
-      sda <= '0';
-    
-    END IF;
-
-WHEN s_done => -- Output data or just go to idle
-
-  WHEN OTHERS =>
-    NULL;
-
-END CASE;
+    WHEN s_done => -- Output data or just go to idle
+  
+    WHEN OTHERS =>
+      NULL;
+  
+  END CASE;
 
 END IF; 
   
