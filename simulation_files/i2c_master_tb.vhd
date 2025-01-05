@@ -25,7 +25,7 @@ ARCHITECTURE BEHAVE OF TB IS
     rst          : IN STD_LOGIC;
   
   -- I2C signals
-    scl          : INOUT STD_LOGIC;
+    scl          : OUT STD_LOGIC;
     sda          : INOUT STD_LOGIC;
   
   -- I2C control signals
