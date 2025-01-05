@@ -75,15 +75,16 @@ ARCHITECTURE rtl OF i2c_master IS
   SIGNAL sda_2r         : STD_LOGIC; -- Stable
   
   TYPE t_i2c_master_state IS (
-    s_idle,      -- Wait for valid inputs
-    s_start,     -- Send start command
-    s_write,     -- Write data to device
-    s_read,      -- Read data from device
-    s_ack,       -- Send an "ACK"
-    s_check_ack, -- Wait for an "ACK"
-    s_error,     -- No "ACK" received
-    s_stop,      -- Send stop command
-    s_done       -- 
+    s_idle,       -- Wait for valid inputs
+    s_start,      -- Send start command
+    s_write_addr, -- Write device address to device
+    s_write_data, -- Write data to device
+    s_read,       -- Read data from device
+    s_ack,        -- Send an "ACK"
+    s_check_ack,  -- Wait for an "ACK"
+    s_error,      -- No "ACK" received
+    s_stop,       -- Send stop command
+    s_done        -- 
   );
   SIGNAL i2c_master_state : t_i2c_master_state;
   SIGNAL next_i2c_state   : t_i2c_master_state;
@@ -158,7 +159,7 @@ BEGIN
     
     ELSIF RISING_EDGE(clk) THEN
     
-      IF sda_cnt = DATA_END AND (i2c_master_state = s_write OR i2c_master_state = s_read) THEN
+      IF sda_cnt = DATA_END AND (i2c_master_state = s_write_addr OR i2c_master_state = s_read) THEN
       
         IF bit_index = 0 THEN
         
@@ -333,7 +334,7 @@ BEGIN
           
               IF dev_addr_r(0) = '0' THEN -- Check if we are writing or reading
               
-                i2c_master_state <= s_write;
+                i2c_master_state <= s_write_addr;
               
               ELSE
               
@@ -353,35 +354,43 @@ BEGIN
           
           END IF;
       
-        WHEN s_write => -- Write to device
-        
-        -- Check what to output. If the current value
-        -- is not zero, "sda" is set to tri-state
-          IF bit_index < BIT_INDEX_MAX THEN
-    	  
-            IF data_in_r(bit_index) /= '0' THEN -- Cannot check for tri-state directly
+        WHEN s_write_addr => -- Write to device
+
+          IF dev_addr_sent = '1' THEN -- Then the data is sent
+
+
+
+          ELSE -- The address is sent first
+
+          -- Check what to output. If the current value
+          -- is not zero, "sda" is set to tri-state
+            IF bit_index < BIT_INDEX_MAX THEN
+      	  
+              IF data_in_r(bit_index) /= '0' THEN -- Cannot check for tri-state directly
+              
+                sda <= 'Z';
+              
+              ELSE
+              
+                sda <= '0';
+              
+              END IF;
+	  	  
+            ELSE -- If the index is out of bounds of the buffer, do nothing
+              NULL;
+            	  
+            END IF;
+      
+          -- Check if this was the last bit
+            IF scl_edge_cnt = SCL_DATA_DONE AND scl_cnt = DATA_END THEN  
+      
+              i2c_master_state <= s_check_ack; 
             
-              sda <= 'Z';
-            
-            ELSE
-            
-              sda <= '0';
+            ELSE -- Not the last bit, do nothing
+              NULL;
             
             END IF;
-		  
-          ELSE -- If the index is out of bounds of the buffer, do nothing
-            NULL;
-          	  
-          END IF;
-    
-        -- Check if this was the last bit
-          IF scl_edge_cnt = SCL_DATA_DONE AND scl_cnt = DATA_END THEN  
-    
-            i2c_master_state <= s_check_ack; 
-          
-          ELSE -- Not the last bit, do nothing
-            NULL;
-          
+
           END IF;
     
         WHEN s_read => -- Read from device
