@@ -97,15 +97,8 @@ ARCHITECTURE rtl OF i2c_master IS
 -- A flag used to enable "scl"
   SIGNAL scl_enable       : STD_LOGIC;
 
--- Buffers. The IMU on the MPU6050 stores values as 16 bit words.
--- The master will be able to read both one and two bytes.
--- When reading two bytes these are combined into a single word.
-  SIGNAL read_word_1       : STD_LOGIC_VECTOR(15 DOWNTO 0);
-  SIGNAL read_word_2       : STD_LOGIC_VECTOR(15 DOWNTO 0);
-  SIGNAL read_word_3       : STD_LOGIC_VECTOR(15 DOWNTO 0);
-  SIGNAL read_byte_1       : STD_LOGIC_VECTOR(7 DOWNTO 0);
-  SIGNAL read_byte_2       : STD_LOGIC_VECTOR(7 DOWNTO 0);
-  SIGNAL read_byte_3       : STD_LOGIC_VECTOR(7 DOWNTO 0);
+-- Buffer for read data
+  SIGNAL read_byte        : STD_LOGIC_VECTOR(7 DOWNTO 0);
 
 -- A counter used as index for reading and writing data
   CONSTANT BIT_INDEX_MAX  : INTEGER := 8;
@@ -290,13 +283,8 @@ BEGIN
       dev_addr_r       <= (OTHERS => '0');
       data_in_r        <= (OTHERS => '0');
       data_out         <= (OTHERS => '0');
-      read_byte_1      <= (OTHERS => '0');
-      read_byte_2      <= (OTHERS => '0');
-      read_byte_3      <= (OTHERS => '0');
-      read_word_1      <= (OTHERS => '0');
-      read_word_2      <= (OTHERS => '0');
-      read_word_3      <= (OTHERS => '0');
-
+      read_byte        <= (OTHERS => '0');
+	  
       i2c_master_state <= s_idle;
       next_i2c_state   <= s_idle;
 
@@ -399,11 +387,11 @@ BEGIN
     	  
             IF sda_2r /= '0' THEN
             
-              read_byte_1(bit_index) <= '1';
+              read_byte(bit_index) <= '1';
             
             ELSE
             
-              read_byte_1(bit_index) <= '0';
+              read_byte(bit_index) <= '0';
             
             END IF;
     	  
@@ -443,7 +431,7 @@ BEGIN
       
               i2c_master_state <= s_done;
       
-            ELSE -- No "ACK"  
+            ELSE -- No "ACK"
       
               i2c_master_state <= s_error;
       
