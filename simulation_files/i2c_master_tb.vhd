@@ -14,6 +14,7 @@ ARCHITECTURE BEHAVE OF TB IS
 -- DUT component
   COMPONENT i2c_master IS
   GENERIC (
+    g_simulation           : BOOLEAN := true;
     g_reset_active_state   : STD_LOGIC := '1';
     g_fpga_clk_freq_mhz    : INTEGER RANGE 1 TO 200 := 27;
     g_desired_scl_freq_khz : INTEGER RANGE 1 TO 400 := 400
@@ -108,8 +109,8 @@ BEGIN
   error        => dut_error  
   );
 
-  dut_scl    <= 'H'; -- Weak pull-up
-  dut_sda    <= 'H'; -- Weak pull-up
+--  dut_scl    <= 'H'; -- Weak pull-up
+--  dut_sda    <= 'H'; -- Weak pull-up
 
 -- Detect and flag start conditions
   start_detection : PROCESS IS
@@ -150,38 +151,39 @@ BEGIN
   END PROCESS;
 
 -- Send "ACK"
---  ack_send : PROCESS IS
---  BEGIN
---
---    dut_sda <= 'Z';
---
---    WAIT UNTIL FALLING_EDGE(dut_scl);
---    
---    IF bit_index = 0 THEN -- Last bit sent
---
---      dut_sda <= '0';
---    
---      WAIT UNTIL FALLING_EDGE(dut_scl); -- Wait until the next falling edge
---
---      bit_index <= 8; -- Reset the bit counter
---
---      dut_sda <= 'Z';
---
---
---      WAIT UNTIL RISING_EDGE(dut_scl);
---      WAIT UNTIL FALLING_EDGE(dut_scl);
---      
---    
---    ELSE
---    
---      bit_index <= bit_index - 1;
---      dut_sda   <= 'Z';
---    
---    END IF;  
---
---    dut_sda   <= 'Z';
---  
---  END PROCESS;
+  ack_send : PROCESS IS
+  BEGIN
+
+    dut_scl    <= 'H'; -- Weak pull-up
+    dut_sda    <= 'H'; -- Weak pull-up
+	
+    WAIT UNTIL FALLING_EDGE(dut_scl);
+    
+    IF bit_index = 0 THEN -- Last bit sent
+
+      dut_sda <= '0';
+    
+      WAIT UNTIL FALLING_EDGE(dut_scl); -- Wait until the next falling edge
+
+      bit_index <= 8; -- Reset the bit counter
+
+      dut_sda <= 'H';
+
+
+      WAIT UNTIL RISING_EDGE(dut_scl);
+      WAIT UNTIL FALLING_EDGE(dut_scl);
+      
+    
+    ELSE
+    
+      bit_index <= bit_index - 1;
+      dut_sda   <= 'H';
+    
+    END IF;  
+
+    dut_sda   <= 'H';
+  
+  END PROCESS;
 
   main_test : PROCESS IS
   BEGIN
