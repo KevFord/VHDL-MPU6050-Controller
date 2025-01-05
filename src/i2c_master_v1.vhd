@@ -16,6 +16,7 @@ LIBRARY IEEE;
 
 ENTITY i2c_master IS
 GENERIC (
+  g_simulation           : BOOLEAN := true;
   g_reset_active_state   : STD_LOGIC := '1';
   g_fpga_clk_freq_mhz    : INTEGER RANGE 1 TO 200 := 27;
   g_desired_scl_freq_khz : INTEGER RANGE 1 TO 400 := 400
@@ -85,6 +86,7 @@ ARCHITECTURE rtl OF i2c_master IS
     s_done       -- 
   );
   SIGNAL i2c_master_state : t_i2c_master_state;
+  SIGNAL next_i2c_state   : t_i2c_master_state;
 
 -- Internal storages of input signals
   SIGNAL dev_addr_r       : STD_LOGIC_VECTOR(dev_addr'LEFT DOWNTO 0);
@@ -293,7 +295,10 @@ BEGIN
       read_word_1      <= (OTHERS => '0');
       read_word_2      <= (OTHERS => '0');
       read_word_3      <= (OTHERS => '0');
-      
+
+      i2c_master_state <= s_idle;
+      next_i2c_state   <= s_idle;
+
     ELSIF RISING_EDGE(clk) THEN
     
       CASE i2c_master_state IS
