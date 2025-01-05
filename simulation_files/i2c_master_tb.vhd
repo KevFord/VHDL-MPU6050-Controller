@@ -78,7 +78,7 @@ ARCHITECTURE BEHAVE OF TB IS
 -- to write data to an I2C device
   SIGNAL start_detected   : STD_LOGIC := '0';
   SIGNAL stop_detected    : STD_LOGIC := '0';
-  SIGNAL bit_index        : INTEGER RANGE 0 TO 7 := 7;
+  SIGNAL bit_index        : INTEGER RANGE 0 TO 8 := 8;
 
 BEGIN
 
@@ -149,6 +149,39 @@ BEGIN
   
   END PROCESS;
 
+-- Send "ACK"
+--  ack_send : PROCESS IS
+--  BEGIN
+--
+--    dut_sda <= 'Z';
+--
+--    WAIT UNTIL FALLING_EDGE(dut_scl);
+--    
+--    IF bit_index = 0 THEN -- Last bit sent
+--
+--      dut_sda <= '0';
+--    
+--      WAIT UNTIL FALLING_EDGE(dut_scl); -- Wait until the next falling edge
+--
+--      bit_index <= 8; -- Reset the bit counter
+--
+--      dut_sda <= 'Z';
+--
+--
+--      WAIT UNTIL RISING_EDGE(dut_scl);
+--      WAIT UNTIL FALLING_EDGE(dut_scl);
+--      
+--    
+--    ELSE
+--    
+--      bit_index <= bit_index - 1;
+--      dut_sda   <= 'Z';
+--    
+--    END IF;  
+--
+--    dut_sda   <= 'Z';
+--  
+--  END PROCESS;
 
   main_test : PROCESS IS
   BEGIN
@@ -162,7 +195,7 @@ BEGIN
 	WAIT FOR 40 ns;
     dut_input_valid <= '0';
 
-    WAIT FOR 1 ms;  
+    WAIT FOR 100 us;  
   
     REPORT "Test completed as intended." SEVERITY FAILURE;
     WAIT;
