@@ -326,7 +326,7 @@ BEGIN
             
               sda <= '0';
           
-              IF dev_addr_r(0) = '0' THEN
+              IF dev_addr_r(0) = '0' THEN -- Check if we are writing or reading
               
                 i2c_master_state <= s_write;
               
@@ -336,13 +336,13 @@ BEGIN
               
               END IF;
             
-            ELSE
+            ELSE -- Counter not finished, keep tri-state
           
               sda <= 'Z';
             
             END IF;
           
-          ELSE
+          ELSE -- Clock low or at an edge, keep tri-state
           
             sda <= 'Z';
           
@@ -352,29 +352,29 @@ BEGIN
         
         -- Check what to output. If the current value
         -- is not zero, "sda" is set to tri-state
-        IF bit_index < BIT_INDEX_MAX THEN
-    	
-          IF data_in_r(bit_index) /= '0' THEN
-          
-            sda <= 'Z';
-          
-          ELSE
-          
-            sda <= '0';
-          
+          IF bit_index < BIT_INDEX_MAX THEN
+    	  
+            IF data_in_r(bit_index) /= '0' THEN -- Cannot check for tri-state directly
+            
+              sda <= 'Z';
+            
+            ELSE
+            
+              sda <= '0';
+            
+            END IF;
+		  
+          ELSE -- If the index is out of bounds of the buffer, do nothing
+            NULL;
+          	  
           END IF;
-    
-        ELSE
-          NULL;
-        	  
-        END IF;
     
         -- Check if this was the last bit
           IF scl_edge_cnt = SCL_DATA_DONE AND scl_cnt = DATA_END THEN  
     
             i2c_master_state <= s_check_ack; 
           
-          ELSE
+          ELSE -- Not the last bit, do nothing
             NULL;
           
           END IF;
@@ -456,21 +456,21 @@ BEGIN
       
               IF error_flag = '1' THEN -- Check to see if an error occured or if this was an expected stop
               
-                i2c_master_state <= s_idle;
+                i2c_master_state <= s_idle; -- Error occured, go back to idle and wait for new input
               
               ELSE
               
-                i2c_master_state <= s_done;
+                i2c_master_state <= s_done; -- Intentional stop, output data
               
               END IF;
       
-            ELSE
+            ELSE -- Hold "sda" low long enough to satisify I2C timing requirements
           
               sda <= '0';
             
             END IF;
         
-          ELSE
+          ELSE -- Hold "sda" low until "scl" is high
           
             sda <= '0';
           
