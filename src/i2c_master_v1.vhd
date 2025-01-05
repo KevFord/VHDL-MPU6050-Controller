@@ -112,7 +112,8 @@ ARCHITECTURE rtl OF i2c_master IS
   SIGNAL error_flag       : STD_LOGIC;
 
 -- A counter keeping track of how many rising edges have been sent on "scl"
-  CONSTANT SCL_DATA_DONE  : INTEGER := 8;
+  CONSTANT SCL_ADDR_DONE  : INTEGER := 8;
+  CONSTANT SCL_DATA_DONE  : INTEGER := 7;
   CONSTANT SCL_ACK_EDGE   : INTEGER := 9;
   SIGNAL scl_edge_cnt     : INTEGER RANGE 0 TO SCL_ACK_EDGE;
 
@@ -152,7 +153,7 @@ BEGIN
     
     ELSIF RISING_EDGE(clk) THEN
     
-      IF sda_cnt = DATA_END AND (i2c_master_state = s_write_addr OR i2c_master_state = s_read) THEN
+      IF sda_cnt = DATA_END AND (i2c_master_state = s_write_addr OR i2c_master_state = s_write_data OR i2c_master_state = s_read) THEN
       
         IF bit_index = 0 THEN
         
@@ -296,7 +297,9 @@ BEGIN
       
           error_flag <= '0'; -- Clear the error flags
           error      <= '0';
-        
+          scl_enable <= '0'; -- Dissable "scl"
+
+
           IF input_valid = '1' THEN -- Sample inputs and go to next state
     
             data_out         <= (OTHERS => '0'); -- Reset the output
@@ -342,43 +345,68 @@ BEGIN
           
           END IF;
       
-        WHEN s_write_addr => -- Write to device
+        WHEN s_write_addr => -- Write the device address
 
-          IF dev_addr_sent = '1' THEN -- Then the data is sent
-
-
-
-          ELSE -- The address is sent first
-
-          -- Check what to output. If the current value
-          -- is not zero, "sda" is set to tri-state
-            IF bit_index < BIT_INDEX_MAX THEN
-      	  
-              IF data_in_r(bit_index) /= '0' THEN -- Cannot check for tri-state directly
-              
-                sda <= 'Z';
-              
-              ELSE
-              
-                sda <= '0';
-              
-              END IF;
-	  	  
-            ELSE -- If the index is out of bounds of the buffer, do nothing
-              NULL;
-            	  
-            END IF;
-      
-          -- Check if this was the last bit
-            IF scl_edge_cnt = SCL_DATA_DONE AND scl_cnt = DATA_END THEN  
-      
-              i2c_master_state <= s_check_ack; 
+        -- Check what to output. If the current value
+        -- is not zero, "sda" is set to tri-state
+          IF bit_index < BIT_INDEX_MAX THEN
+       
+            IF dev_addr_r(bit_index) /= '0' THEN -- Cannot check for tri-state directly
             
-            ELSE -- Not the last bit, do nothing
-              NULL;
+              sda <= 'Z';
+            
+            ELSE
+            
+              sda <= '0';
             
             END IF;
+	   
+          ELSE -- If the index is out of bounds of the buffer, do nothing
+            NULL;
+          	  
+          END IF;
+     
+        -- Check if this was the last bit
+          IF scl_edge_cnt = SCL_ADDR_DONE AND scl_cnt = DATA_END THEN  
+     
+            i2c_master_state <= s_check_ack; 
+            next_i2c_state   <= s_write_data; -- Device address sent, now send data
+          
+          ELSE -- Not the last bit, do nothing
+            NULL;
+          
+          END IF;
 
+        WHEN s_write_data => -- Write data
+
+        -- Check what to output. If the current value
+        -- is not zero, "sda" is set to tri-state
+          IF bit_index < BIT_INDEX_MAX THEN
+       
+            IF data_in_r(bit_index) /= '0' THEN -- Cannot check for tri-state directly
+            
+              sda <= 'Z';
+            
+            ELSE
+            
+              sda <= '0';
+            
+            END IF;
+	   
+          ELSE -- If the index is out of bounds of the buffer, do nothing
+            NULL;
+
+          END IF;
+     
+        -- Check if this was the last bit
+          IF scl_edge_cnt = SCL_DATA_DONE AND scl_cnt = DATA_END THEN  
+     
+            i2c_master_state <= s_check_ack; 
+            next_i2c_state   <= s_stop; -- The write is complete, send stop
+          
+          ELSE -- Not the last bit, do nothing
+            NULL;
+          
           END IF;
     
         WHEN s_read => -- Read from device
@@ -425,11 +453,11 @@ BEGIN
       
         WHEN s_check_ack => -- Wait for an "ACK"
         
-          IF scl_1r = '0' AND scl_2r = '1' AND scl_edge_cnt = SCL_ACK_EDGE THEN -- Rising edge of "scl"
+          IF scl_1r = '0' AND scl_2r = '1' THEN -- Rising edge of "scl"
       
             IF sda = '0' THEN -- "ACK"
       
-              i2c_master_state <= s_done;
+              i2c_master_state <= next_i2c_state; -- Go to next state
       
             ELSE -- No "ACK"
       
