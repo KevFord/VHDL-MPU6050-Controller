@@ -299,7 +299,6 @@ BEGIN
           error      <= '0';
           scl_enable <= '0'; -- Dissable "scl"
 
-
           IF input_valid = '1' THEN -- Sample inputs and go to next state
     
             data_out         <= (OTHERS => '0'); -- Reset the output
@@ -507,6 +506,10 @@ BEGIN
           END IF;
       
         WHEN s_done => -- Output data or just go to idle
+		
+          data_out         <= read_byte;
+          data_valid       <= '1';
+          i2c_master_state <= s_idle;
       
         WHEN OTHERS =>
           NULL;
