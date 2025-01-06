@@ -7,13 +7,13 @@ LIBRARY IEEE;
 
 ENTITY mpu6050_ctrl IS
 GENERIC (
-  g_reset_active_state : STD_LOGIC := '1';
+  g_reset_active_state : STD_LOGIC := '0';
   g_fpga_clock_mhz     : INTEGER RANGE 1 TO 200 := 27
 );
 PORT (
 -- Clock and reset
   clk          : IN STD_LOGIC;
-  rst          : IN STD_LOGIC;
+  rst_n        : IN STD_LOGIC;
 
 -- I2C control signals
 -- Inputs
@@ -28,7 +28,7 @@ PORT (
   input_valid  : OUT STD_LOGIC;
 
 -- The LEDs of the Tang Nano 9k board, used as status flags
-  led_out      : OUT STD_LOGIC_VECTOR(5 DOWNTO 0)
+  led_o      : OUT STD_LOGIC_VECTOR(5 DOWNTO 0)
 );
 
 END ENTITY;
@@ -65,12 +65,12 @@ ARCHITECTURE rtl OF mpu6050_ctrl IS
   CONSTANT NUMBER_OF_LED_STATES : INTEGER := 5;
   TYPE t_led_pattern IS ARRAY (0 TO NUMBER_OF_LED_STATES) OF STD_LOGIC_VECTOR(5 DOWNTO 0);
   CONSTANT LED_PATTERN : t_led_pattern := (
-    "101000",
-    "000011",
-    "110011",
-    "101101",
-    "001100",
-    "111111"
+    "100000",
+    "010000",
+    "001000",
+    "000100",
+    "000010",
+    "000001"
   );
   CONSTANT NO_ACK_RECEIVED  : INTEGER := 0;
   CONSTANT WHO_AM_I_FAILED  : INTEGER := 1;
@@ -83,34 +83,63 @@ ARCHITECTURE rtl OF mpu6050_ctrl IS
   CONSTANT LED_TIMEOUT      : INTEGER := g_fpga_clock_mhz * 10000;
   SIGNAL led_timeout_count  : INTEGER RANGE 0 TO LED_TIMEOUT;
 
+-- Flags 
+  SIGNAL addr_sent    : STD_LOGIC;
+  SIGNAL data_sent    : STD_LOGIC;
+  
+
 BEGIN
 
-  mpu_control_process : PROCESS(clk, rst) IS
+  mpu_control_process : PROCESS(clk, rst_n) IS
   BEGIN
 
-IF rst = g_reset_active_state THEN 
+IF rst_n = g_reset_active_state THEN 
 
   data_in           <= (OTHERS => '0');
   dev_addr          <= (OTHERS => '0');
   num_of_bytes      <= 1;
   led_timeout_count <= 0;
   input_valid       <= '0';
-  led_out           <= LED_PATTERN(CLEAR_ERROR_LED);
+  led_o             <= "101010";
   controller_state  <= s_idle;
+  addr_sent         <= '0';
+  data_sent         <= '0';
 
 ELSIF RISING_EDGE(clk) THEN
+
+  input_valid <= '0';
 
 CASE controller_state IS
 
 WHEN s_idle =>
   
-  led_out          <= LED_PATTERN(CLEAR_ERROR_LED);
+  led_o            <= LED_PATTERN(CLEAR_ERROR_LED);
   controller_state <= s_check_who_am_i;
+  addr_sent        <= '0';
+  data_sent        <= '0';
 
 WHEN s_check_who_am_i =>
 
+IF addr_sent = '0' THEN
+
   dev_addr         <= MPU_ADDR & '0';
   data_in          <= WHO_AM_I_ADDR;
+  input_valid      <= '1';
+  
+  IF data_valid = '1' THEN
+  
+    addr_sent <= '1';
+  
+  ELSE
+    
+    led_o <= LED_PATTERN(ERROR_STATE_3);
+  
+  END IF;
+
+ELSE -- Data sent
+
+  dev_addr    <= MPU_ADDR & '1';
+  input_valid <= '1';
 
   IF error = '1' THEN
   
@@ -118,8 +147,16 @@ WHEN s_check_who_am_i =>
   
   ELSIF data_valid = '1' THEN
   
-    led_out          <= data_out(6 DOWNTO 1); -- Contents of WHO_AM_I
-    
+  IF data_out = EXPECTED_VALUE THEN
+  
+    led_o <= "110011"; -- Contents of WHO_AM_I
+
+  ELSE
+
+    led_o <= "001100";
+
+  END IF;  
+
     IF led_timeout_count = LED_TIMEOUT THEN
     
       controller_state  <= s_idle;
@@ -133,6 +170,10 @@ WHEN s_check_who_am_i =>
   
   END IF;
 
+END IF;
+
+
+
 WHEN s_set_pwr_state =>
 WHEN s_set_clock_div =>
 WHEN s_read_accel_x =>
@@ -144,7 +185,7 @@ WHEN s_read_gyro_z =>
 
   WHEN s_error =>
   
-    led_out          <= LED_PATTERN(NO_ACK_RECEIVED);
+    led_o          <= LED_PATTERN(NO_ACK_RECEIVED);
     
     IF led_timeout_count = LED_TIMEOUT THEN
     

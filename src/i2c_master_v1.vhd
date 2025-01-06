@@ -24,7 +24,7 @@ GENERIC (
 PORT (
 -- Clock and reset
   clk          : IN STD_LOGIC;
-  rst          : IN STD_LOGIC;
+  rst_n        : IN STD_LOGIC;
 
 -- I2C signals
   scl          : OUT STD_LOGIC;
@@ -120,10 +120,10 @@ ARCHITECTURE rtl OF i2c_master IS
 BEGIN
 
 -- Increment and reset the "sda" clock
-  sda_clock : PROCESS(clk, rst) IS
+  sda_clock : PROCESS(clk, rst_n) IS
   BEGIN
   
-    IF rst = g_reset_active_state THEN
+    IF rst_n = g_reset_active_state THEN
 
       sda_cnt <= 0;
     
@@ -144,10 +144,10 @@ BEGIN
   END PROCESS;
 
 -- Decrement and reset the bit index signal 
-  bit_index_cnt : PROCESS(clk, rst) IS
+  bit_index_cnt : PROCESS(clk, rst_n) IS
   BEGIN
   
-    IF rst = g_reset_active_state THEN
+    IF rst_n = g_reset_active_state THEN
     
       bit_index <= BIT_INDEX_MAX;
     
@@ -177,10 +177,10 @@ BEGIN
 
 -- As "sda" is an inout port, the inputs need to be synchronized to the FPGA clock domain.
 -- This is done by "doubble flipping" the input.
-  sda_sync : PROCESS(clk, rst) IS
+  sda_sync : PROCESS(clk, rst_n) IS
   BEGIN
   
-    IF rst = g_reset_active_state THEN
+    IF rst_n = g_reset_active_state THEN
     
       sda_1r    <= '0';
       sda_2r    <= '0';
@@ -195,10 +195,10 @@ BEGIN
   END PROCESS;
 
 -- Increment and reset the counter used for "scl" -timing.
-  scl_clock : PROCESS(clk, rst) IS
+  scl_clock : PROCESS(clk, rst_n) IS
   BEGIN
 
-    IF rst = g_reset_active_state THEN
+    IF rst_n = g_reset_active_state THEN
 
       scl_edge_cnt <= 0;
       scl_cnt      <= 0;
@@ -238,10 +238,10 @@ BEGIN
   END PROCESS;
 
 -- Control "scl".
-  scl_process     : PROCESS(clk, rst) IS
+  scl_process     : PROCESS(clk, rst_n) IS
   BEGIN
 
-    IF rst = g_reset_active_state THEN
+    IF rst_n = g_reset_active_state THEN
 
       scl_1r <= '1';
       scl_2r <= '1';
@@ -267,10 +267,10 @@ BEGIN
 
   END PROCESS;
 
-  sda_process     : PROCESS(clk, rst) IS
+  sda_process     : PROCESS(clk, rst_n) IS
   BEGIN
 
-    IF rst = g_reset_active_state THEN
+    IF rst_n = g_reset_active_state THEN
     
       num_of_bytes_r   <= 1;
       ack_timeout_cnt  <= 0;
@@ -284,7 +284,7 @@ BEGIN
       dev_addr_r       <= (OTHERS => '0');
       data_in_r        <= (OTHERS => '0');
       data_out         <= (OTHERS => '0');
-      read_byte        <= (OTHERS => '0');
+      read_byte        <= "10011100";
 	  
       i2c_master_state <= s_idle;
       next_i2c_state   <= s_idle;
