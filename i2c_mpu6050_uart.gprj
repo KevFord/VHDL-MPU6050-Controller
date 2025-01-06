@@ -6,5 +6,8 @@
     <Device name="GW1NR-9C" pn="GW1NR-LV9QN88PC6/I5">gw1nr9c-004</Device>
     <FileList>
         <File path="src/i2c_master_v1.vhd" type="file.vhdl" enable="1"/>
+        <File path="src/mpu6050_controller.vhd" type="file.vhdl" enable="1"/>
+        <File path="src/mpu_top_level.vhd" type="file.vhdl" enable="1"/>
+        <File path="src/constraints.cst" type="file.cst" enable="1"/>
     </FileList>
 </Project>
