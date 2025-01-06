@@ -1,0 +1,30 @@
+# Onboard leds:
+IO_LOC "led_o[5]" 16;
+IO_PORT "led_o[5]" PULL_MODE=NONE DRIVE=8;
+IO_LOC "led_o[4]" 15;
+IO_PORT "led_o[4]" PULL_MODE=NONE DRIVE=8;
+IO_LOC "led_o[3]" 14;
+IO_PORT "led_o[3]" PULL_MODE=NONE DRIVE=8;
+IO_LOC "led_o[2]" 13;
+IO_PORT "led_o[2]" PULL_MODE=NONE DRIVE=8;
+IO_LOC "led_o[1]" 11;
+IO_PORT "led_o[1]" PULL_MODE=NONE DRIVE=8;
+IO_LOC "led_o[0]" 10;
+IO_PORT "led_o[0]" PULL_MODE=NONE DRIVE=8;
+
+# SDA
+IO_LOC "sda" 69;
+IO_PORT "sda" PULL_MODE=NONE;
+IO_PORT "sda" IO_TYPE=LVCMOS33;
+
+# SCL
+IO_LOC "scl" 68;
+IO_PORT "scl" PULL_MODE=NONE;
+IO_PORT "scl" IO_TYPE=LVCMOS33;
+
+# Clock:
+IO_LOC "clk" 52;
+
+# Reset button:
+IO_LOC "rst_n" 3;
+IO_PORT "rst_n" PULL_MODE=UP;
