@@ -72,12 +72,12 @@ ARCHITECTURE rtl OF mpu6050_ctrl IS
   CONSTANT NUMBER_OF_LED_STATES : INTEGER := 5;
   TYPE t_led_pattern IS ARRAY (0 TO NUMBER_OF_LED_STATES) OF STD_LOGIC_VECTOR(5 DOWNTO 0);
   CONSTANT LED_PATTERN : t_led_pattern := (
-    "101010",
-    "111110",
-    "110011",
-    "011110",
-    "001100",
-    "000000"
+    "101010", -- No ACK received
+    "111110", -- Power on
+    "110011", -- Clock division set
+    "011110", -- Who am i wrong contents
+    "001100", -- Waiting
+    "000000"  -- Reset
   );
   CONSTANT NO_ACK_RECEIVED  : INTEGER := 0;
   CONSTANT PWR_MGT_1_SET    : INTEGER := 1;
@@ -87,13 +87,15 @@ ARCHITECTURE rtl OF mpu6050_ctrl IS
   CONSTANT CLEAR_ERROR_LED  : INTEGER := 5;
 
 -- A timer to ensure the leds are visible
-  CONSTANT LED_TIMEOUT      : INTEGER := g_fpga_clock_mhz * 100000;
+  CONSTANT LED_TIMEOUT      : INTEGER := g_fpga_clock_mhz * 10000000;
   SIGNAL led_timeout_count  : INTEGER RANGE 0 TO LED_TIMEOUT;
 
 -- Flags 
   SIGNAL addr_sent    : STD_LOGIC;
   SIGNAL data_sent    : STD_LOGIC;
 
+-- An RX buffer
+  SIGNAL rx_buffer    : STD_LOGIC_VECTOR(data_out'LEFT DOWNTO 0);
 
 BEGIN
 
@@ -111,6 +113,7 @@ IF rst_n = g_reset_active_state THEN
   controller_state  <= s_idle;
   addr_sent         <= '0';
   data_sent         <= '0';
+  rx_buffer         <= (OTHERS => '0');
 
 ELSIF RISING_EDGE(clk) THEN
 
@@ -251,13 +254,15 @@ ELSE -- Data sent
   
   ELSIF data_valid = '1' THEN
   
+    rx_buffer <= data_out;
+  
   IF data_out = EXPECTED_VALUE THEN
   
     led_o <= data_out(6 DOWNTO 1); -- Contents of WHO_AM_I
 
-  ELSE
+  ELSE -- Wrong value received
 
-    led_o <= "101101";
+    led_o <= LED_PATTERN(WHO_AM_I_FAILED);
 
   END IF;  
 
@@ -265,7 +270,7 @@ ELSE -- Data sent
   
     IF led_timeout_count = LED_TIMEOUT AND data_sent = '1' THEN
     
-      controller_state  <= s_idle;
+      controller_state  <= s_done;
       led_timeout_count <= 0;
       data_sent <= '1';    
    
@@ -303,7 +308,7 @@ WHEN s_read_gyro_z =>
 
 WHEN s_done =>
 
-  led_o <= ;
+  led_o <= rx_buffer(6 DOWNTO 1);
 
 
   WHEN OTHERS =>
